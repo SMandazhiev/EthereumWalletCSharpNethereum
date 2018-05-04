@@ -5,14 +5,13 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Nethereum.HdWallet;
-using Nethereum.KeyStore;
 using Nethereum.Web3;
 using Nethereum.Web3.Accounts;
 using Newtonsoft.Json;
 using NBitcoin;
 using Rijndael256;
 
-namespace EtherWallet
+namespace EthereumWallet
 {
     public class EthereumWalletNetCore
     {
@@ -35,98 +34,46 @@ namespace EtherWallet
             Wallet wallet = new Wallet(Wordlist.English, WordCount.Twelve);
             while (!input.ToLower().Equals("exit"))
             {
-                // First the user must load working wallet. This can happen in three ways:
-                // Create brand-new wallet.
-                // Load existing wallet from json file by enter his name and password.
-                // Recover existing wallet from mnemonic phrase (words).
+                /* First the user must load working wallet. This can happen in three ways:
+                   Create brand-new wallet.
+                   Load existing wallet from json file by enter his name and password.
+                   Recover existing wallet from mnemonic phrase (words).*/
                 if (!isWalletReady)
                 {
                     do
                     {
-                        WriteLine("Choose working wallet.");
-                        WriteLine("Choose [create] to Create new Wallet.");
-                        WriteLine("Choose [load] to load existing Wallet from file.");
-                        WriteLine("Choose [recover] to recover Wallet with Mnemonic Phrase.");
-                        Write("Enter operation [\"Create\", \"Load\", \"Recover\", \"Exit\"]: ");
-                        input = ReadLine().ToLower().Trim();
+                        input = ReceiveCommandCreateLoadOrRecover();
+
                     } while (!((IList)valiableOperations).Contains(input));
                     switch (input)
                     {
                         // Create brand-new wallet. User will receive mnemonic phrase, public and private keys.
                         case "create":
-                            try
-                            {
-                                string password;
-                                string passwordConfirmed;
-                                do
-                                {
-                                    Write("Enter password for encryption: ");
-                                    password = ReadLine();
-                                    Write("Confirm password: ");
-                                    passwordConfirmed = ReadLine();
-                                    if (password != passwordConfirmed)
-                                    {
-                                        WriteLine("Passwords did not match!");
-                                        WriteLine("Try again.");
-                                    }
-                                } while (password != passwordConfirmed);
-
-                                wallet = CreateWallet(password, workingDirectory);
-                                isWalletReady = true;
-                            }
-                            catch (Exception)
-                            {
-                                WriteLine($"ERROR! Wallet in path {workingDirectory} can`t be created!");
-                                throw;
-                            }
-
+                            wallet = CreateWalletDialog();
+                            isWalletReady = true;
                             break;
 
-                        // Load wallet from json file.
-                        // Json file contains encrypted mnemonic phrase (words).
+                        // Load wallet from json file contains encrypted mnemonic phrase (words).
                         // This command will decrypt words and load wallet.
                         case "load":
-                            Write("Enter: Name of the file containing wallet: ");
-                            string nameOfWallet = ReadLine();
-                            Write("Enter: Password: ");
-                            string pass = ReadLine();
-                            try
-                            {
-                                wallet = LoadWalletFromJsonFile(nameOfWallet, workingDirectory, pass);
-                                isWalletReady = true;
-                            }
-                            catch (Exception)
-                            {
-                                WriteLine($"ERROR! Wallet {nameOfWallet} in path {workingDirectory} can`t be loaded!");
-                            }
+                            wallet = LoadWalletDialog();
+                            isWalletReady = true;
                             break;
 
-                        // Recover wallet from mnemonic phrase (words) which you must enter.
-                        // This is usefull if user have wallet, but have no json file for him 
-                        // (for example if he use this program for a first time).
-                        // Command will create new Json file contains encrypted mnemonic phrase (words)
-                        // for this wallet.
-                        // After encrypt words program will load wallet.
+                        /* Recover wallet from mnemonic phrase (words) which user must enter.
+                         This is usefull if user has wallet, but has no json file for him 
+                         (for example if he uses this program for the first time).
+                         Command will creates new Json file contains encrypted mnemonic phrase (words)
+                         for this wallet.
+                         After encrypt words program will load wallet.*/
                         case "recover":
-                            try
-                            {
-                                Write("Enter: Mnemonic words with single space separator: ");
-                                string mnemonicPhrase = ReadLine();
-                                Write("Enter: password for encryption: ");
-                                string passForEncryptionInJsonFile = ReadLine();
-                                wallet = RecoverFromMnemonicPhraseAndSaveToJson(mnemonicPhrase, passForEncryptionInJsonFile, workingDirectory);
-                                isWalletReady = true;
-                            }
-                            catch (Exception e)
-                            {
-                                WriteLine("ERROR! Wallet can`t be recovered! Check your mnemonic phrase.");
-                            }
+                            wallet = RecoverWalletDialog();
+                            isWalletReady = true;
                             break;
 
                         // Exit from the program.
                         case "exit":
                             return;
-
                     }
                 }
                 else // When wallet is already loaded user can operates with it.
@@ -139,55 +86,19 @@ namespace EtherWallet
                     {
                         do
                         {
-                            Write("Enter operation [\"Balance\", \"Receive\", \"Send\", \"Exit\"]: ");
-                            inputCommand = ReadLine().ToLower().Trim();
+                            inputCommand = ReceiveCommandForEthersOperations();
+
                         } while (!((IList)valiableCommands).Contains(inputCommand));
                         switch (inputCommand)
                         {
                             // Send transaction from address to address
                             case "send":
-                                WriteLine("Enter: Address sending ethers.");
-                                string fromAddress = ReadLine();
-                                WriteLine("Enter: Address receiving ethers.");
-                                string toAddress = ReadLine();
-                                WriteLine("Enter: Amount of coins in ETH.");
-                                double amountOfCoins = 0d;
-                                try
-                                {
-                                    amountOfCoins = double.Parse(ReadLine());
-                                }
-                                catch (Exception)
-                                {
-                                    WriteLine("Unacceptable input for amount of coins.");
-                                }
-                                if (amountOfCoins > 0.0d)
-                                {
-                                    WriteLine($"You will send {amountOfCoins} ETH from {fromAddress} to {toAddress}");
-                                    WriteLine($"Are you sure? yes/no");
-                                    string answer = ReadLine();
-                                    if (answer.ToLower() == "yes")
-                                    {
-                                        await Send(wallet, fromAddress, toAddress, amountOfCoins);
-                                    }
-                                }
-                                else
-                                {
-                                    WriteLine("Amount of coins for transaction must be positive number!");
-                                }
+                                await SendTransactionDialog(wallet);
                                 break;
 
                             // Shows the balances of addresses and total balance.
                             case "balance":
-                                WriteLine("Balance:");
-                                try
-                                {
-                                    await Balance(web3, wallet);
-                                }
-                                catch (Exception)
-                                {
-                                    WriteLine("Error occured! Check your wallet.");
-                                }
-
+                                await GetWalletBallanceDialog(web3, wallet);
                                 break;
 
                             // Shows the addresses in which you can receive coins.
@@ -199,6 +110,136 @@ namespace EtherWallet
                         }
                     }
                 }
+            }
+        }
+
+        private static string ReceiveCommandCreateLoadOrRecover()
+        {
+            WriteLine("Choose working wallet.");
+            WriteLine("Choose [create] to Create new Wallet.");
+            WriteLine("Choose [load] to load existing Wallet from file.");
+            WriteLine("Choose [recover] to recover Wallet with Mnemonic Phrase.");
+            Write("Enter operation [\"Create\", \"Load\", \"Recover\", \"Exit\"]: ");
+            string input = ReadLine().ToLower().Trim();
+            return input;
+        }
+
+        private static Wallet CreateWalletDialog()
+        {
+            try
+            {
+                string password;
+                string passwordConfirmed;
+                do
+                {
+                    Write("Enter password for encryption: ");
+                    password = ReadLine();
+                    Write("Confirm password: ");
+                    passwordConfirmed = ReadLine();
+                    if (password != passwordConfirmed)
+                    {
+                        WriteLine("Passwords did not match!");
+                        WriteLine("Try again.");
+                    }
+                } while (password != passwordConfirmed);
+
+                Wallet wallet = CreateWallet(password, workingDirectory);
+                return (wallet);
+            }
+            catch (Exception)
+            {
+                WriteLine($"ERROR! Wallet in path {workingDirectory} can`t be created!");
+                throw;
+            }
+        }
+
+        private static Wallet LoadWalletDialog()
+        {
+            Write("Enter: Name of the file containing wallet: ");
+            string nameOfWallet = ReadLine();
+            Write("Enter: Password: ");
+            string pass = ReadLine();
+            try
+            {
+                Wallet wallet = LoadWalletFromJsonFile(nameOfWallet, workingDirectory, pass);
+                return (wallet);
+
+            }
+            catch (Exception e)
+            {
+                WriteLine($"ERROR! Wallet {nameOfWallet} in path {workingDirectory} can`t be loaded!");
+                throw e;
+            }
+        }
+
+        private static Wallet RecoverWalletDialog()
+        {
+            try
+            {
+                Write("Enter: Mnemonic words with single space separator: ");
+                string mnemonicPhrase = ReadLine();
+                Write("Enter: password for encryption: ");
+                string passForEncryptionInJsonFile = ReadLine();
+                Wallet wallet = RecoverFromMnemonicPhraseAndSaveToJson(
+                    mnemonicPhrase, passForEncryptionInJsonFile, workingDirectory);
+                return wallet;
+            }
+            catch (Exception e)
+            {
+                WriteLine("ERROR! Wallet can`t be recovered! Check your mnemonic phrase.");
+                throw e;
+            }
+        }
+
+        private static string ReceiveCommandForEthersOperations()
+        {
+            Write("Enter operation [\"Balance\", \"Receive\", \"Send\", \"Exit\"]: ");
+            string inputCommand = ReadLine().ToLower().Trim();
+            return inputCommand;
+        }
+
+        private static async Task SendTransactionDialog(Wallet wallet)
+        {
+            WriteLine("Enter: Address sending ethers.");
+            string fromAddress = ReadLine();
+            WriteLine("Enter: Address receiving ethers.");
+            string toAddress = ReadLine();
+            WriteLine("Enter: Amount of coins in ETH.");
+            double amountOfCoins = 0d;
+            try
+            {
+                amountOfCoins = double.Parse(ReadLine());
+            }
+            catch (Exception)
+            {
+                WriteLine("Unacceptable input for amount of coins.");
+            }
+            if (amountOfCoins > 0.0d)
+            {
+                WriteLine($"You will send {amountOfCoins} ETH from {fromAddress} to {toAddress}");
+                WriteLine($"Are you sure? yes/no");
+                string answer = ReadLine();
+                if (answer.ToLower() == "yes")
+                {
+                    await Send(wallet, fromAddress, toAddress, amountOfCoins);
+                }
+            }
+            else
+            {
+                WriteLine("Amount of coins for transaction must be positive number!");
+            }
+        }
+
+        private static async Task GetWalletBallanceDialog(Web3 web3, Wallet wallet)
+        {
+            WriteLine("Balance:");
+            try
+            {
+                await Balance(web3, wallet);
+            }
+            catch (Exception)
+            {
+                WriteLine("Error occured! Check your wallet.");
             }
         }
 
@@ -267,7 +308,7 @@ namespace EtherWallet
         public static string SaveWalletToJsonFile(Wallet wallet, string password, string pathfile)
         {
             string words = string.Join(" ", wallet.Words);
-            var encryptedWords = Rijndael.Encrypt(words, password, KeySize.Aes256); // Encrypt the Mnwmonic phrase
+            var encryptedWords = Rijndael.Encrypt(words, password, KeySize.Aes256); // Encrypt the Mnemonic phrase
             string date = DateTime.Now.ToString();
             // Anonymous object containing encryptedWords and date will be writen in the Json file
             var walletJsonData = new { encryptedWords = encryptedWords, date = date };
@@ -326,8 +367,8 @@ namespace EtherWallet
         {
             Wallet wallet = new Wallet(words, null);
             WriteLine("Wallet was successfully recovered.");
-             WriteLine("Words: " + string.Join(" ", wallet.Words));
-             WriteLine("Seed: " + string.Join(" ", wallet.Seed));
+            WriteLine("Words: " + string.Join(" ", wallet.Words));
+            WriteLine("Seed: " + string.Join(" ", wallet.Seed));
             WriteLine();
             PrintAddressesAndKeys(wallet);
             return wallet;
@@ -401,7 +442,10 @@ namespace EtherWallet
             {
                 var transaction =
                                 await web3.TransactionManager
-                                .SendTransactionAsync(accountFrom.Address, toAddress, new Nethereum.Hex.HexTypes.HexBigInteger(wei));
+                                .SendTransactionAsync(
+                                    accountFrom.Address,
+                                    toAddress,
+                                    new Nethereum.Hex.HexTypes.HexBigInteger(wei));
                 WriteLine("Transaction has been sent successfully!");
             }
             catch (Exception e)
@@ -409,7 +453,6 @@ namespace EtherWallet
                 WriteLine($"ERROR! The transaction can`t be completed! {e}");
                 throw e;
             }
-
         }
 
         /// <summary>
